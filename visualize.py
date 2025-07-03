@@ -2,6 +2,7 @@ import math, torch, numpy as np, matplotlib.pyplot as plt
 import imageio.v2 as imageio
 from io import BytesIO
 from pathlib import Path
+from dataset import SPHERE_POINTS
 
 
 # -- helpers --
@@ -19,35 +20,6 @@ def _cube_grid(ax, lim: tuple = (0, 1), step: float = 0.25, lw: float = 0.3) -> 
         ax.plot([t, t], [lim[1], lim[1]], [lim[0], lim[1]], c='k', lw=lw, alpha=0.3)
         ax.plot([lim[0], lim[0]], [t, t], [lim[0], lim[1]], c='k', lw=lw, alpha=0.3)
         ax.plot([lim[1], lim[1]], [t, t], [lim[0], lim[1]], c='k', lw=lw, alpha=0.3)
-
-
-# -- sphere generator --
-def golden_sphere_points(n: int,
-                         seed: int | None = None) -> torch.Tensor:
-    """
-    Uniform-ish points on the unit sphere (centre 0.5).  
-    Colours are random but repeatable via `seed`.
-    Returns: [n,6] tensor  (xyz rgb)   all in [0,1]
-    """
-    if seed is not None:
-        torch.manual_seed(seed)
-
-    idx     = torch.arange(0, n, dtype=torch.float32) + 0.5
-    phi     = torch.acos(1 - 2*idx/n)
-    theta   = math.tau * idx * (1 + math.sqrt(5))/2
-
-    x       = torch.cos(theta) * torch.sin(phi)
-    y       = torch.sin(theta) * torch.sin(phi)
-    z       = torch.cos(phi)
-
-    xyz     = torch.stack([x, y, z], dim=1) * 0.5 + 0.5   # map to [0,1]
-    rgb     = torch.rand(n, 3)                            # random colours [0,1]
-
-    return torch.cat([xyz, rgb], dim=1)                   # [n,6]
-
-
-SPHERE_POINTS = golden_sphere_points(512, seed=42)
-
 
 # -- sampling utils --
 def sample_random_cloud(n: int,
@@ -150,4 +122,4 @@ def visualize_noising_demo(points: torch.Tensor,
 
 # -- quick test --
 if __name__ == "__main__":
-    visualize_noising_demo(SPHERE_POINTS, T=40, out="sphere_noise_denoise")
+    visualize_noising_demo(SPHERE_POINTS, T=40, out="visualizations/sphere_noise_denoise")
