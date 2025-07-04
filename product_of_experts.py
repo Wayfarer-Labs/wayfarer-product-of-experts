@@ -12,22 +12,22 @@ N_EPOCHS, BATCH_SIZE = 500, 64
 DEVICE               = 'cuda:0'
 CHECKPOINT_DIR       = Path(__file__).parent / 'checkpoints'
 VISUALIZATION_DIR    = Path(__file__).parent / 'visualizations'
-LOADER               = DataLoader(SphereDataset(), batch_size=BATCH_SIZE, shuffle=True)
+LOADER               = DataLoader(SphereDataset(n_pts=128), batch_size=BATCH_SIZE, shuffle=True)
 
 
 # -- load (or train) all experts
 from expert import Expert_FlowMatching
 
-expert_xr  = Expert_FlowMatching(axis='x', colour='r', device=DEVICE)
-expert_yg  = Expert_FlowMatching(axis='y', colour='g', device=DEVICE)
-expert_zb  = Expert_FlowMatching(axis='z', colour='b', device=DEVICE)
-expert_all = Expert_FlowMatching(axis='all_axes', colour='all_colours', device=DEVICE)
+expert_xr  = Expert_FlowMatching(axis='x', colour='r', device=DEVICE, n_epochs=N_EPOCHS)
+expert_yg  = Expert_FlowMatching(axis='y', colour='g', device=DEVICE, n_epochs=N_EPOCHS)
+expert_zb  = Expert_FlowMatching(axis='z', colour='b', device=DEVICE, n_epochs=N_EPOCHS)
+expert_all = Expert_FlowMatching(axis='all_axes', colour='all_colours', device=DEVICE, n_epochs=N_EPOCHS)
 
 for expert in tqdm((expert_xr, expert_yg, expert_zb, expert_all), desc='Loading experts'):
     if (ckpt := CHECKPOINT_DIR / f"{expert.name}.pt").exists():
         expert.load_state_dict(torch.load(ckpt)) ; continue
     
-    expert.train_loop(LOADER, n_epochs=N_EPOCHS, ckpt_dir=CHECKPOINT_DIR)
+    expert.train_loop(LOADER, ckpt_dir=CHECKPOINT_DIR)
 
 # -- visualize experts individually (should not denoise the whole sphere properly)
 from samplers import sample

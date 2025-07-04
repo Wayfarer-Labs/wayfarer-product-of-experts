@@ -51,7 +51,9 @@ class Expert_FlowMatching(nn.Module):
     def __init__(self,
                  axis: str, colour: str,
                  hidden: list[int] = [256, 256, 256],
-                 lr: float = 3e-4, device: str = 'cpu'):
+                 lr: float = 3e-4,
+                 n_epochs: int = 500,
+                 device: str = 'cpu'):
         super().__init__()
         assert (axis in 'xyz' or axis == 'all_axes') and (colour in 'rgb' or colour == 'all_colours')
         self.axis      = axis
@@ -73,6 +75,8 @@ class Expert_FlowMatching(nn.Module):
         
         self.net    = nn.Sequential(*layers).to(device)
         self.opt    = optim.Adam(self.parameters(), lr=lr)
+        self.epochs = n_epochs
+        self.sched  = optim.lr_scheduler.CosineAnnealingLR(self.opt, T_max=n_epochs)
         self.device = device
 
     @property
@@ -106,7 +110,6 @@ class Expert_FlowMatching(nn.Module):
     # ─────────────────────────────────────────  training  ──
     def train_loop(self,
                    loader: DataLoader,
-                   n_epochs: int = 5,
                    ckpt_dir: str | Path | None = None):
         """
         Flow-matching objective for linear (rectified-flow) forward process:
@@ -118,7 +121,7 @@ class Expert_FlowMatching(nn.Module):
         mask        = self.mask.to(self.device)            # [6]
         mse         = nn.MSELoss()
 
-        for ep in tqdm(range(1, n_epochs + 1)):
+        for ep in tqdm(range(1, self.epochs + 1)):
             tot, n = 0.0, 0
             for cloud in loader:                    # cloud [B,N,6]
                 cloud   = cloud.to(self.device)
@@ -157,19 +160,19 @@ if __name__ == "__main__":
     loader  = DataLoader(ds, batch_size=64, shuffle=True)   # whole cloud per batch
     CHECKPOINT_DIR = Path(__file__).parent / 'checkpoints'
 
-    expert_xr  = Expert_FlowMatching(axis='x', colour='r', device='cuda:0')
-    expert_yg  = Expert_FlowMatching(axis='y', colour='g', device='cuda:0')
-    expert_zb  = Expert_FlowMatching(axis='z', colour='b', device='cuda:0')
-    expert_all = Expert_FlowMatching(axis='all', colour='all', device='cuda:0')
+    expert_xr  = Expert_FlowMatching(axis='x', colour='r', device='cuda:1', n_epochs=100)
+    expert_yg  = Expert_FlowMatching(axis='y', colour='g', device='cuda:1', n_epochs=100)
+    expert_zb  = Expert_FlowMatching(axis='z', colour='b', device='cuda:1', n_epochs=100)
+    expert_all = Expert_FlowMatching(axis='all_axes', colour='all_colours', device='cuda:1', n_epochs=100)
     
-    expert_xr .train_loop(loader, n_epochs=100, ckpt_dir=CHECKPOINT_DIR)
-    expert_yg .train_loop(loader, n_epochs=100, ckpt_dir=CHECKPOINT_DIR)
-    expert_zb .train_loop(loader, n_epochs=100, ckpt_dir=CHECKPOINT_DIR)
-    expert_all.train_loop(loader, n_epochs=100, ckpt_dir=CHECKPOINT_DIR)
+    expert_xr .train_loop(loader, ckpt_dir=CHECKPOINT_DIR)
+    expert_yg .train_loop(loader, ckpt_dir=CHECKPOINT_DIR)
+    expert_zb .train_loop(loader, ckpt_dir=CHECKPOINT_DIR)
+    expert_all.train_loop(loader, ckpt_dir=CHECKPOINT_DIR)
 
     expert_xr .load_state_dict(torch.load(CHECKPOINT_DIR / 'expert_xr.pt'))
     expert_yg .load_state_dict(torch.load(CHECKPOINT_DIR / 'expert_yg.pt'))
     expert_zb .load_state_dict(torch.load(CHECKPOINT_DIR / 'expert_zb.pt'))
     expert_all.load_state_dict(torch.load(CHECKPOINT_DIR / 'expert_all.pt'))
 
-    noise = torch.randn(1000, 6, device='cuda:0')
+    noise = torch.randn(1000, 6, device='cuda:1')
