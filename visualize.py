@@ -59,9 +59,9 @@ def _scatter_frame(points: torch.Tensor,
                    elev: int = 20,
                    azim: int = 45,
                    dot_size: int = 10) -> np.ndarray:
-
-    fig = plt.figure(figsize=(4, 4))
-    ax  = fig.add_subplot(111, projection='3d')
+    points  = points.cpu()
+    fig     = plt.figure(figsize=(4, 4))
+    ax      = fig.add_subplot(111, projection='3d')
     ax.view_init(elev=elev, azim=azim)
 
     xyz, rgb = points[:, :3], points[:, 3:]
