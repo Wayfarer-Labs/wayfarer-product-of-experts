@@ -71,8 +71,8 @@ class BaseFlowExpert(nn.Module):
         vel[:, self.mask]   = out[:, self.mask]
         return              vel.view(B,N,self.out_dim)
 
-    def _mask_cloud(self, pts: Tensor) -> Tensor:
-        return pts
+    def calculate_target(self, cloud: Tensor, eps: Tensor) -> Tensor:
+        return eps-cloud
 
     def train_loop(self, loader: DataLoader, ckpt_dir: Path | None = None):
         self.train()
@@ -93,7 +93,7 @@ class BaseFlowExpert(nn.Module):
                 # -- since the velocity is masked within `calculate_velocity`
                 # but returned as [..., 6]
                 pred    = self.calculate_velocity(x_t,t)
-                target  = (eps-cloud)
+                target  = self.calculate_target(cloud, eps)
                 loss    = mse(pred, target)
 
                 self.opt.zero_grad(); loss.backward(); self.opt.step()
@@ -152,6 +152,38 @@ class GenerativeExpert_Color(BaseFlowExpert):
         clr = pts[:, :, _rshift_slice(3, self.IDX['rgb'])]
         vel = super().calculate_velocity(clr, t)
         return torch.cat([torch.zeros_like(axs), vel], dim=-1)
+
+
+class GenerativeExpert_Monochrome(BaseFlowExpert):
+    """
+    Velocity = mean_RGB - RGB   (for channels 3-5).
+    Drives every point towards the cloud's average colour, i.e. low entropy.
+    """
+    def __init__(self, **kwargs):
+        mask = torch.zeros(3, dtype=torch.bool)          # only RGB dims
+        mask[:] = True                                   # [True,True,True]
+        super().__init__(mask=mask, out_dim=3, **kwargs)
+
+    @property
+    def name(self) -> str: return 'expert_mono'
+
+    # --- override training step to use custom target --------------------- #
+    def calculate_target(self, x0: Tensor, eps: Tensor) -> Tensor:
+        """
+        Optimal velocity for rectified flow with 'variant-reduction' prior:
+            v*  =  mean_rgb - rgb
+        """
+        mean_rgb = x0[..., 3:6].mean(dim=-2, keepdim=True)         # [B,1,3]
+        return torch.cat([torch.zeros_like(x0[..., :3]), mean_rgb - x0[..., 3:6]], dim=-1)
+
+    def calculate_velocity(self, pts: Tensor, t: Tensor) -> Tensor:
+        """
+        Feed full 6-dim state (xyz+rgb) but predict **only** RGB drift.
+        """
+        rgb = pts[..., 3:6]                                       # [B,N,3]
+        vel_rgb = super().calculate_velocity(rgb, t)              # zeros on xyz
+        xyz = torch.zeros_like(pts[..., :3])                      # keep xyz untouched
+        return torch.cat([xyz, vel_rgb], dim=-1)                  # [B,N,6]
 
 
 # -- discriminative expert that gives a reward for a certain color
