@@ -1,0 +1,65 @@
+
+
+## Diffusion/Flow based models from a MCMC/Langevin Flow perspective:
+
+## Why a discriminator is not enough for colors:
+
+### Why a **discriminator alone** can’t repaint the cloud
+
+( —or, why you still need a **generative colour field** )
+
+| Mechanism                                                                                                                       | What it *can* do                                                                                                                      | What it *cannot* do                                                                                                                                                                        |
+| ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Discriminative expert**  returns a **scalar reward** $r(x)$. It *adds* $\log r$ to the particle’s log-weight.                 | • **Select** particles that **already** satisfy the colour preference.<br>• **Duplicate / delete** whole particles during resampling. | • **Modify the contents** of a particle, because it supplies **no gradient / velocity**. Every coordinate of $x$ stays exactly what the generative experts (or the initial noise) made it. |
+| **Generative colour expert** outputs a **velocity field** $\,v_{\text{rgb}}(x,t)$.  It goes **inside** the Euler/Langevin step. | • **Continuously push** every particle’s RGB values toward its colour prior (e.g. banded yellow–purple–teal, or “make it red”).       | — (it already supplies the gradient; no selection pressure)                                                                                                                                |
+
+#### What happens with **only** the discriminator
+
+1. **Initial noise**: each particle gets a random colour.
+2. **Geometry experts** bend xyz into a sphere (RGB untouched).
+3. **Colour reward** evaluates: particles that *happen* to start red get large weights; others get small weights.
+4. **Resampling** keeps a few lucky red particles and discards the rest.
+   *But those “lucky reds” were red from the very start*; no particle ever changes its RGB coordinates.
+
+Result → a red sphere **appears** only if you started with **enough particles** that one of them was red by chance.
+With few particles—or if the reward targets a rare colour—you get nothing.
+
+---
+
+#### What changes when you add the **colour-generative expert**
+
+* At every inner step it outputs non-zero velocities on channels 3-5, nudging *all* particles toward its colour prior.
+* The discriminator still re-weights, steering the fleet to the reddest parts of that prior.
+* Now even a particle that started blue can gradually slide toward red, so the reward signal has something to work with.
+
+---
+
+### Intuitive picture
+
+```
+Only discriminator:
+    reds-in-noise?  yes → replicate
+                    no  → fail
+Discriminator + colour drift:
+    every step RGB ← RGB + Δt · v_rgb
+    reward favours redder particles
+    ⇒ whole fleet crawls toward red
+```
+
+---
+
+### When *can* a discriminator alone be enough?
+
+*If* you can afford **a huge particle count** (or many SMC stages) so that
+“random chance” covers the desired colour, the discriminator can pick it out.
+That’s exactly how vanilla **random search + rejection sampling** works—but it
+is exponentially inefficient in high-dimensional spaces.
+
+---
+
+### Bottom line
+
+*The discriminator is the **selector**, not the **painter**.*
+Without a generative colour field (or at least Langevin noise on RGB) it can
+only keep the colours that happened to be there already; it can’t create or
+refine them.
