@@ -30,6 +30,7 @@ def sample(
 
     return torch.stack(traj) if return_trajectory else traj[-1]
 
+
 def _effective_sample_size(log_w):
     # -- looks at the values of each particle, and counts
     # only the ones that still contribute. we use this to
@@ -51,7 +52,7 @@ def _multinomial_resample(particles, log_w):
 def sample_product_of_experts(
     generative_experts:     list[BaseFlowExpert],
     discriminative_experts: list[DiscriminativeExpert_Color],
-    n_particles: int          = 6,
+    n_particles: int          = 12,
     n_points: int             = 512,
     n_denoise_steps: int      = 32,     # number of denoising steps for each expert (i.e. number of intermediate denoised distributions)
     n_seek_steps: int         = 3,      # number of mcmc steps per intermediate denoised distribution

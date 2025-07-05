@@ -10,6 +10,7 @@ from    torch.utils.data import DataLoader
 from dataset import SphereDataset
 from itertools import pairwise
 
+def _rshift_slice(n: int, slc: slice) -> slice: return slice(slc.start+n, slc.stop+n)
 
 class T_Embed(nn.Module):
     def __init__(self, out_dim: int = 4):
@@ -22,9 +23,9 @@ class T_Embed(nn.Module):
 class BaseFlowExpert(nn.Module):
 
     IDX = {'x': 0, 'y': 1, 'z': 2,
-           'r': 3, 'g': 4, 'b': 5,
-           'all_axes': slice(0,3),
-           'rgb': slice(3,6)}
+           'r': 0, 'g': 1, 'b': 2,
+           'all_axes':  slice(0,3),
+           'rgb':       slice(0,3)}
 
     def __init__(self,
                  mask: torch.BoolTensor,
@@ -60,15 +61,18 @@ class BaseFlowExpert(nn.Module):
     def name(self) -> str:
         return 'base_expert'
 
-    def calculate_velocity(self, pts: Tensor, t: Tensor) -> Tensor:
+    def calculate_velocity(self, pts: Tensor, t: Tensor) -> tuple[Tensor, torch.BoolTensor]:
         B, N, _ = pts.shape
         t_emb   = self.t_embed(t.expand(B,N,1))
         out     = self.net(torch.cat([pts,t_emb],dim=-1).view(-1, self.out_dim+self.t_dim))
 
         # -- mask is zero (discarded) by default
-        vel                 = torch.zeros_like(out)
+        vel                 = torch.zeros_like(out) 
         vel[:, self.mask]   = out[:, self.mask]
         return              vel.view(B,N,self.out_dim)
+
+    def _mask_cloud(self, pts: Tensor) -> Tensor:
+        return pts
 
     def train_loop(self, loader: DataLoader, ckpt_dir: Path | None = None):
         self.train()
@@ -86,12 +90,10 @@ class BaseFlowExpert(nn.Module):
                 t       = torch.rand(B,1,1,device=self.device)
                 x_t     = ((1 - t) * cloud) + (t * eps)
 
+                # -- since the velocity is masked within `calculate_velocity`
+                # but returned as [..., 6]
                 pred    = self.calculate_velocity(x_t,t)
-
-                # -- for this toy example, model can only optimize for its selected expertise
-                target  = (eps-cloud)[:, :, self.mask]
-                pred    = pred       [:, :, self.mask]
-
+                target  = (eps-cloud)
                 loss    = mse(pred, target)
 
                 self.opt.zero_grad(); loss.backward(); self.opt.step()
@@ -126,21 +128,19 @@ class GenerativeExpert_Axis(BaseFlowExpert):
         # expert with random colors
         pts = pts.clone()
         clr = pts[:, :, self.IDX['rgb']]
-        pts = pts[:, :, self.IDX['all_axes']]
-        vel = super().calculate_velocity(pts, t)
+        axs = pts[:, :, self.IDX['all_axes']]
+        vel = super().calculate_velocity(axs, t)
         return torch.cat([vel, torch.zeros_like(clr)], dim=-1)
 
 
 class GenerativeExpert_Color(BaseFlowExpert):
-    CH_IDX = {'r': 3, 'g': 4, 'b': 5,
-              'rgb': slice(3,6)}
 
     def __init__(self, color: str, **kwargs):
-        assert color in self.CH_IDX
+        assert color in {'r', 'g', 'b', 'rgb'}
 
         self.color                 = color
         mask                       = torch.zeros(3,dtype=torch.bool)
-        mask[self.CH_IDX[color]]   = True       # velocities only on RGB channel(s)
+        mask[self.IDX[color]]      = True       # velocities only on RGB channel(s)
         super().__init__(mask=mask, out_dim=3, **kwargs)
 
     @property
@@ -148,8 +148,8 @@ class GenerativeExpert_Color(BaseFlowExpert):
 
     def calculate_velocity(self, pts: Tensor, t: Tensor) -> Tensor:
         pts = pts.clone()
-        axs = pts[:, :, self.IDX['all_axes']]
-        clr = pts[:, :, self.CH_IDX['rgb']]
+        axs = pts[:, :,              self.IDX['all_axes']]
+        clr = pts[:, :, _rshift_slice(3, self.IDX['rgb'])]
         vel = super().calculate_velocity(clr, t)
         return torch.cat([torch.zeros_like(axs), vel], dim=-1)
 
@@ -162,12 +162,15 @@ class DiscriminativeExpert_Color(nn.Module):
     """
     CH_IDX = {'r': 3, 'g': 4, 'b': 5}        # xyz(0-2)  rgb(3-5)
 
-    def __init__(self, color: str, coef: float = 1.0, device: str = 'cpu'):
+    def __init__(self, color: str, coef: float = 300.0, device: str = 'cpu'):
         super().__init__()
         assert color in self.CH_IDX or color == 'white'
         self.color   = color
         self.coef    = coef                  # sharpness λ
         self.device  = device
+
+    @property
+    def name(self) -> str: return f'expert_disc_{self.color}'
 
     @torch.no_grad()
     def score(self, cloud: torch.Tensor) -> torch.Tensor:
@@ -178,18 +181,51 @@ class DiscriminativeExpert_Color(nn.Module):
         # promote [N,6] → [1,N,6]
         if cloud.ndim == 2: cloud = cloud.unsqueeze(0)
 
-        rgb   = cloud[..., 3:6]
+        rgb         = cloud[..., 3:6]
+        rgb_mean    = rgb.mean(dim=-2)
         # reward high overall brightness for all-colors
-        if self.color == 'white': reward = rgb.mean(dim=(-2, -1))
+        if self.color == 'white': reward = rgb_mean.mean(dim=-1)
         else:
-            idx     = self.CH_IDX[self.color] - 3
-            others  = rgb[:, [i for i in range(3) if i != idx]].mean(-1)
-            reward  = rgb[:, idx].mean(-1) - others.mean(-1)
+            idx      = self.CH_IDX[self.color] - 3
+            selected = rgb_mean[:, idx]
+            others   = (rgb_mean.sum(dim=-1) - selected) / 2
+            reward   = selected - others
 
         return self.coef * reward
 
     def train_loop(self, loader: DataLoader, ckpt_dir: str | Path | None = None):
         pass
+
+
+class DiscriminativeExpert_Ellipsoid(nn.Module):
+    """
+    Reward higher when points are close to an ellipsoid centred at (0.5,0.5,0.5)
+    with semi-axes (a, b, c).  Returns log-reward shape [L].
+    """
+    def __init__(self, a=0.6, b=0.3, c=0.6, coef=50.0, device="cpu"):
+        super().__init__()
+        self.a, self.b, self.c = a, b, c
+        self.coef = coef
+        self.device = device 
+
+    @property
+    def name(self) -> str: return f'expert_disc_ell'
+
+    @torch.no_grad()
+    def score(self, cloud: torch.Tensor) -> torch.Tensor:
+        if cloud.ndim == 2:            # [N,6] → [1,N,6]
+            cloud = cloud.unsqueeze(0)
+        xyz = cloud[..., :3]
+        centred = xyz - 0.5
+        dist2 = (
+            (centred[..., 0] / self.a) ** 2 +
+            (centred[..., 1] / self.b) ** 2 +
+            (centred[..., 2] / self.c) ** 2
+        )                               # shape [L,N]
+        mean_sq = dist2.mean(dim=-1)     # [L]
+        reward  = -mean_sq              # closer ⇒ less distance ⇒ higher reward
+        return self.coef * reward       # log-space weight
+
 
 
 # ───────────────────────────────────── demo run ──

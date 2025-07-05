@@ -34,7 +34,7 @@ SPHERE_POINTS = golden_sphere_points(512, seed=42)
 class SphereDataset(Dataset):
     """Yields the SAME clean sphere every time; noise is added in train loop."""
     def __init__(self, n_pts=256, num_datapoints=10_000):
-        self.cloud   = golden_sphere_points(n_pts, seed=42)   # [N,6]  float32
+        self.cloud   = golden_sphere_points(n_pts, seed=24)   # [N,6]  float32
         self.num_datapoints = num_datapoints
 
     def __len__(self):  return self.num_datapoints
