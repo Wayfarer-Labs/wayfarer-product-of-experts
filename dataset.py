@@ -22,7 +22,7 @@ def golden_sphere_points(n: int,
     z       = torch.cos(phi)
 
     xyz     = torch.stack([x, y, z], dim=1) * 0.5 + 0.5   # map to [0,1]
-    rgb     = torch.rand(n, 3)                            # random colours [0,1]
+    rgb     = torch.tensor([1.0, 1.0, 0.0]).repeat(n, 1)  # yellow
 
     return torch.cat([xyz, rgb], dim=1)                   # [n,6]
 

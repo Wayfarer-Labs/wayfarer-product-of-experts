@@ -1,9 +1,9 @@
 import  torch
-from    experts import GenerativeExpert_Axis, DiscriminativeExpert_Color
+from    experts import GenerativeExpert_Axis, DiscriminativeExpert_Color, BaseFlowExpert
 
 @torch.no_grad()
 def sample(
-    expert: GenerativeExpert_Axis,
+    expert: BaseFlowExpert,
     n_points: int             = 512,
     n_denoise_steps: int      = 32,
     step_size: float          = 1.0,
@@ -49,7 +49,7 @@ def _multinomial_resample(particles, log_w):
 
 
 def sample_product_of_experts(
-    generative_experts:     list[GenerativeExpert_Axis],
+    generative_experts:     list[BaseFlowExpert],
     discriminative_experts: list[DiscriminativeExpert_Color],
     n_particles: int          = 6,
     n_points: int             = 512,
