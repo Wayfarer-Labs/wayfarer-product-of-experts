@@ -22,13 +22,13 @@ def golden_sphere_points(n: int,
     z       = torch.cos(phi)
 
     xyz     = torch.stack([x, y, z], dim=1) * 0.5 + 0.5   # map to [0,1]
-    rgb     = torch.tensor([1.0, 1.0, 0.0]).repeat(n, 1)  # yellow
+    rgb     = torch.rand(n, 3)
+    # rgb     = torch.tensor([1.0, 1.0, 0.0]).repeat(n, 1)  # yellow
 
     return torch.cat([xyz, rgb], dim=1)                   # [n,6]
 
 
 SPHERE_POINTS = golden_sphere_points(512, seed=42)
-
 
 
 class SphereDataset(Dataset):
@@ -40,4 +40,4 @@ class SphereDataset(Dataset):
     def __len__(self):  return self.num_datapoints
 
     def __getitem__(self, _):
-        return self.cloud            
+        return self.cloud

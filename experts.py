@@ -154,6 +154,22 @@ class GenerativeExpert_Color(BaseFlowExpert):
         return torch.cat([torch.zeros_like(axs), vel], dim=-1)
 
 
+
+def _snap_to_palette(mean_rgb: Tensor) -> Tensor:
+    """
+    mean_rgb : [B,1,3]
+    return   : [B,1,3] snapped to nearest palette colour (L2).
+    """
+    PALETTE = torch.tensor([
+        [0.,0.,0.], [1.,0.,0.], [0.,1.,0.], [1.,1.,0.],
+        [0.,0.,1.], [1.,0.,1.], [0.,1.,1.], [1.,1.,1.]
+    ], device=mean_rgb.device)
+    # mean_rgb  →  [B,8,3]  ;  palette → [1,8,3]
+    dist2 = ((mean_rgb - PALETTE.unsqueeze(0))**2).sum(-1)   # [B,8]
+    idx   = dist2.argmin(dim=-1)                             # [B]
+    return PALETTE[idx].unsqueeze(1)                         # [B,1,3]
+
+
 class GenerativeExpert_Monochrome(BaseFlowExpert):
     """
     Velocity = mean_RGB - RGB   (for channels 3-5).
@@ -174,6 +190,7 @@ class GenerativeExpert_Monochrome(BaseFlowExpert):
             v*  =  mean_rgb - rgb
         """
         mean_rgb = x0[..., 3:6].mean(dim=-2, keepdim=True)         # [B,1,3]
+        mean_rgb = _snap_to_palette(mean_rgb)
         return torch.cat([torch.zeros_like(x0[..., :3]), mean_rgb - x0[..., 3:6]], dim=-1)
 
     def calculate_velocity(self, pts: Tensor, t: Tensor) -> Tensor:

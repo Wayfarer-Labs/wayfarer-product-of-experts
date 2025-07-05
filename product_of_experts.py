@@ -45,7 +45,7 @@ from samplers import sample, sample_product_of_experts
 
 # for expert in tqdm((expert_x, expert_y, expert_z, expert_all, expert_rgb), desc='Visualizing generative experts'):
 for expert in tqdm((expert_mono,), desc='Visualizing generative experts'):
-    continue # testing 
+    # continue # testing 
     denoised_trajectory = sample(expert, n_denoise_steps=128, return_trajectory=True, device=DEVICE)
     vis.render_points_over_time(denoised_trajectory, path=VISUALIZATION_DIR / f"{expert.name}.gif", show_path=True)
 
