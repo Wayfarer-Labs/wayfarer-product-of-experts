@@ -1,0 +1,10 @@
+ipython
+tqdm
+torch==2.6.0
+numpy<2
+imageio
+
+matplotlib>=3.3
+ipykernel>=6.25
+notebook>=7.0
+jupyter>=1.0
