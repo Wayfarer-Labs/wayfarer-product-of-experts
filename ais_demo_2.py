@@ -40,7 +40,7 @@ class AlgorithmStepDisplay(VGroup):
         self,
         font_size: float = 20,
         line_spacing: float = 0.3,
-        inactive_opacity: float = 0.4,
+        inactive_opacity: float = 0.6,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -122,9 +122,13 @@ class AlgorithmStepDisplay(VGroup):
             else:
                 self.text_left_positions.append(text.get_left()[0])
         
-        # Initially hide all steps
-        for text, number in zip(self.step_texts, self.step_numbers):
-            text.set_opacity(0)
+        # Initially hide all steps (they will fade in)
+        for i, (text, number) in enumerate(zip(self.step_texts, self.step_numbers)):
+            if isinstance(text, VGroup):  # Special handling for step 5
+                for part in text:
+                    part.set_opacity(0)
+            else:
+                text.set_opacity(0)
             number.set_opacity(0)
             self.add(text, number)
     
@@ -176,35 +180,25 @@ class AlgorithmStepDisplay(VGroup):
         """Update the current step and optionally the loop variables."""
         self.current_step = step
         
-        # Update visibility and colors
+        # Update visibility and colors - all steps remain visible
         for i, (text, number) in enumerate(zip(self.step_texts, self.step_numbers)):
-            if i <= step:
-                # Step should be visible
-                if i == step:
-                    # Current step - full white (or green for winner)
-                    if isinstance(text, VGroup):  # Special handling for step 5
-                        text[0].set_color(WHITE).set_opacity(1)
-                        text[1].set_color(GREEN).set_opacity(1)  # Keep winner green
-                        text[2].set_color(WHITE).set_opacity(1)
-                    else:
-                        text.set_color(WHITE).set_opacity(1)
-                    number.set_color(WHITE).set_opacity(1)
+            if i == step:
+                # Current step - full white (or green for winner)
+                if isinstance(text, VGroup):  # Special handling for step 5
+                    text[0].set_color(WHITE).set_opacity(1)
+                    text[1].set_color(GREEN).set_opacity(1)  # Keep winner green
+                    text[2].set_color(WHITE).set_opacity(1)
                 else:
-                    # Previous step - grayed out
-                    if isinstance(text, VGroup):  # Special handling for step 5
-                        for part in text:
-                            part.set_color(GRAY).set_opacity(self.inactive_opacity)
-                    else:
-                        text.set_color(GRAY).set_opacity(self.inactive_opacity)
-                    number.set_color(GRAY).set_opacity(self.inactive_opacity)
+                    text.set_color(WHITE).set_opacity(1)
+                number.set_color(WHITE).set_opacity(1)
             else:
-                # Future step - hidden
+                # All other steps - grayed out but visible
                 if isinstance(text, VGroup):  # Special handling for step 5
                     for part in text:
-                        part.set_opacity(0)
+                        part.set_color(GRAY).set_opacity(self.inactive_opacity)
                 else:
-                    text.set_opacity(0)
-                number.set_opacity(0)
+                    text.set_color(GRAY).set_opacity(self.inactive_opacity)
+                number.set_color(GRAY).set_opacity(self.inactive_opacity)
     
     def animate_to_step(self, step: int, t: Optional[int] = None, k: Optional[int] = None):
         """Return animations to transition to a new step."""
@@ -283,8 +277,19 @@ class AlgorithmStepDisplay(VGroup):
                     else:
                         animations.append(self.step_texts[i].animate.set_color(GRAY).set_opacity(self.inactive_opacity))
                     animations.append(self.step_numbers[i].animate.set_color(GRAY).set_opacity(self.inactive_opacity))
-        
-        return AnimationGroup(*animations) if animations else Wait(0.01)
+        return animations
+    
+    def fade_in_all(self):
+        """Return animations to fade in all steps as grayed out."""
+        animations = []
+        for i, (text, number) in enumerate(zip(self.step_texts, self.step_numbers)):
+            if isinstance(text, VGroup):  # Special handling for step 5
+                for part in text:
+                    animations.append(part.animate.set_opacity(self.inactive_opacity).set_color(GRAY))
+            else:
+                animations.append(text.animate.set_opacity(self.inactive_opacity).set_color(GRAY))
+            animations.append(number.animate.set_opacity(self.inactive_opacity).set_color(GRAY))
+        return AnimationGroup(*animations)
 
 
 class AISDemo2(Scene):
@@ -294,7 +299,7 @@ class AISDemo2(Scene):
         # Set up axes - centered and larger
         self.axes = Axes(
             x_range=[-4, 4, 1],
-            y_range=[0, 0.45, 0.1],  # Adjusted for normalized PDFs
+            y_range=[0, 0.5, 0.1],  # Adjusted for sharp peaks
             tips=False,
             x_length=7,  # Larger for better visibility
             y_length=3.5,  # Proportional height
@@ -312,7 +317,7 @@ class AISDemo2(Scene):
         self.algo_display = AlgorithmStepDisplay(
             font_size=24,  # Good size for visibility
             line_spacing=0.3,  # Tighter spacing
-            inactive_opacity=0.5
+            inactive_opacity=0.6  # More visible when grayed out
         )
         self.algo_display.set_z_index(10)
         
@@ -320,7 +325,8 @@ class AISDemo2(Scene):
         self.play(
             Create(self.axes), 
             FadeIn(label, shift=DOWN),
-            run_time=0.2
+            self.algo_display.fade_in_all(),  # Fade in all algorithm steps as gray
+            run_time=0.3
         )
         
         # curves for α = 0, 0.5, 1
@@ -331,10 +337,11 @@ class AISDemo2(Scene):
         
         # Create initial curve
         self.play(Create(curve_p4), run_time=0.3)
+        self.wait(0.2)
         
-        # Step 0: Initialize particles - speed up all animations
-        self.play(self.algo_display.animate_to_step(0), run_time=0.15)
-        self.wait(0.05)
+        # Step 0: Initialize particles
+        self.play(self.algo_display.animate_to_step(0), run_time=0.3)
+        self.wait(0.1)
         
         # Step 1: Start t loop
         self.play(self.algo_display.animate_to_step(1, t=0), run_time=0.2)
@@ -353,35 +360,42 @@ class AISDemo2(Scene):
             self.play(self.algo_display.animate_to_step(2, t=0, k=k), run_time=0.1)
             self.play(self.algo_display.animate_to_step(3, t=0, k=k), run_time=0.1)
         
-        # Step 4: Resample
-        self.play(self.algo_display.animate_to_step(4, t=0), run_time=0.2)
+        # Step 4: Resample - synchronized with curve transition
+        self.play(
+            self.algo_display.animate_to_step(4, t=0),
+            Transform(curve_p4, curve_p3),
+            run_time=0.5  # Same timing for both
+        )
         self.wait(0.1)
         
-        # Show transitions between curves
-        self.play(
-            Transform(curve_p4, curve_p3),
-            run_time=0.3
-        )
-        
-        # Continue with more t iterations (very fast)
+        # Continue with more t iterations (synchronized transitions)
         for t in range(1, 4):
-            self.play(self.algo_display.animate_to_step(1, t=t), run_time=0.15)
-            self.wait(0.05)
+            self.play(self.algo_display.animate_to_step(1, t=t), run_time=0.2)
+            self.wait(0.1)
             
             for k in range(4):
                 self.play(self.algo_display.animate_to_step(2, t=t, k=k), run_time=0.1)
                 self.play(self.algo_display.animate_to_step(3, t=t, k=k), run_time=0.1)
             
-            self.play(self.algo_display.animate_to_step(4, t=t), run_time=0.15)
-            
-            # Transform curve for each t iteration
+            # Resample and transform curve together
             if t == 1:
-                self.play(Transform(curve_p4, curve_p2), run_time=0.3)
+                next_curve = curve_p2
             elif t == 2:
-                self.play(Transform(curve_p4, curve_p1), run_time=0.3)
+                next_curve = curve_p1
+            else:
+                next_curve = None
+            
+            if next_curve:
+                self.play(
+                    self.algo_display.animate_to_step(4, t=t),
+                    Transform(curve_p4, next_curve),
+                    run_time=0.5  # Same timing for both
+                )
+            else:
+                self.play(self.algo_display.animate_to_step(4, t=t), run_time=0.5)
         
         # Step 5: Choose winner
-        self.play(self.algo_display.animate_to_step(5), run_time=0.2)
+        self.play(self.algo_display.animate_to_step(5), run_time=0.3)
         self.wait(0.5)
         
         # Final wait to see the complete state
@@ -398,12 +412,14 @@ class AISDemo2(Scene):
         # Standard normal
         g = np.exp(-0.5 * x**2) / np.sqrt(2 * np.pi)
         
-        # Product of Experts (3 peaked distribution)
-        poe = (0.5 * np.exp(-0.8 * (x + 2)**2 / 0.3) + 
-               0.2 * np.exp(-0.5 * x**2 / 0.1) + 
-               0.3 * np.exp(-0.5 * (x - 2)**2 / 0.2))
+        # Product of Experts (3 peaked distribution) with very sharp peaks
+        # Reduced variance (0.03) for sharp peaks that showcase hostile landscape
+        # Heights: left=0.8 (tallest), middle=0.3 (shortest), right=0.5 (middle)
+        poe = (0.8 * np.exp(-0.8 * (x + 2)**2 / 0.06) + 
+               0.3 * np.exp(-0.5 * x**2 / 0.12) + 
+               0.5 * np.exp(-0.5 * (x - 2)**2 / 0.06))
         
         # Normalize poe to have similar scale as g
-        poe = poe * 0.15
+        poe = poe * 0.07
         
         return (1 - alpha) * g + alpha * poe
