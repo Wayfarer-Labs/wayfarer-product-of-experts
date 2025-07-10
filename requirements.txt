@@ -8,3 +8,5 @@ matplotlib>=3.3
 ipykernel>=6.25
 notebook>=7.0
 jupyter>=1.0
+manim
+# tectonic install: `curl --proto '=https' --tlsv1.2 -fsSL https://drop-sh.fullyjustified.net |sh`
