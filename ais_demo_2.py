@@ -131,14 +131,14 @@ class AlgorithmStepDisplay(VGroup):
     def _arrange_texts(self):
         """Arrange text objects with proper spacing and alignment."""
         # Define starting positions and indentations
-        base_x = 1.5  # Base x position 
-        base_y = 1.5  # Starting y position
-        indent_width = 0.7  # Width per indent level
+        base_x = 2.8  # Position for top-right
+        base_y = 2.2  # Start below the title
+        indent_width = 0.6  # Good visible indentation
         y_spacing = self.line_spacing  # Use the configured line spacing
         
         # Calculate positions for each step
         for i, text in enumerate(self.step_texts):
-            # Calculate y position
+            # Calculate y position (going down from top)
             y_pos = base_y - (i * y_spacing)
             
             # Calculate x position based on indent level
@@ -165,7 +165,7 @@ class AlgorithmStepDisplay(VGroup):
                 max_right = right_x
         
         # Position numbers
-        number_x = min(max_right + 0.8, 6.0)  # Cap at 6.0 to avoid going off screen
+        number_x = min(max_right + 0.7, 6.3)  # Ensure it fits on screen
         for text, number in zip(self.step_texts, self.step_numbers):
             # Position at same height as text
             number.move_to([number_x, text.get_center()[1], 0])
@@ -291,21 +291,27 @@ class AISDemo2(Scene):
     current_alpha: float
 
     def construct(self):
-        # Set up axes and title
+        # Set up axes - centered and larger
         self.axes = Axes(
             x_range=[-4, 4, 1],
-            y_range=[0, 1.1, 0.2],
+            y_range=[0, 0.45, 0.1],  # Adjusted for normalized PDFs
             tips=False,
-            x_length=4,  # Even smaller axes
-            y_length=2
-        ).to_corner(DL, buff=0.3)  # Bottom left corner, less buffer
+            x_length=7,  # Larger for better visibility
+            y_length=3.5,  # Proportional height
+            axis_config={
+                "include_numbers": True,
+                "font_size": 20,
+            }
+        ).move_to(LEFT * 1.2 + DOWN * 0.2)  # Center-left and slightly down
         
-        label = Text("Product-of-Experts for Visual Generation", font_size=24).to_corner(UP)
+        label = Text("Product-of-Experts for Visual Generation", font_size=28).to_edge(UP, buff=0.3).to_edge(LEFT, buff=0.5)
+        
+        label = Text("Product-of-Experts for Visual Generation", font_size=26).to_corner(UL, buff=0.5)  # Top-left
         
         # Create algorithm display with adjusted parameters
         self.algo_display = AlgorithmStepDisplay(
-            font_size=20,  # Slightly smaller for better fit
-            line_spacing=0.25,  # Good spacing to see structure
+            font_size=24,  # Good size for visibility
+            line_spacing=0.3,  # Tighter spacing
             inactive_opacity=0.5
         )
         self.algo_display.set_z_index(10)
@@ -384,13 +390,20 @@ class AISDemo2(Scene):
     def blended_curve(self, alpha: float, *, color: ManimColor):
         """Return VMobject for (1‑α)·N(0,1) + α·3‑peaked PoE."""
         graph = self.axes.plot(lambda x: self.blend_pdf_scalar(x, alpha),
-                               color=color, stroke_width=4)
+                               color=color, stroke_width=8)  # Even thicker lines
         return graph
 
     # pdf for scalar x and alpha
     def blend_pdf_scalar(self, x: float, alpha: float):
-        g = np.exp(-0.5 * x**2)
-        poe =  (0.5 * np.exp(-0.5 * (x + 2)**2 / 0.1) +
-                0.2 * np.exp(-0.5 * x**2 / 0.1) +
-                0.3 * np.exp(-0.5 * (x - 2)**2 / 0.1))
+        # Standard normal
+        g = np.exp(-0.5 * x**2) / np.sqrt(2 * np.pi)
+        
+        # Product of Experts (3 peaked distribution)
+        poe = (0.5 * np.exp(-0.8 * (x + 2)**2 / 0.3) + 
+               0.2 * np.exp(-0.5 * x**2 / 0.1) + 
+               0.3 * np.exp(-0.5 * (x - 2)**2 / 0.2))
+        
+        # Normalize poe to have similar scale as g
+        poe = poe * 0.15
+        
         return (1 - alpha) * g + alpha * poe
